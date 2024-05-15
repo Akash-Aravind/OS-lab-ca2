@@ -5,55 +5,37 @@
 #define NUM_PHILOSOPHERS 5
 int chopstick[NUM_PHILOSOPHERS] = {1, 1, 1, 1, 1}; // 1 represents available, 0 represents taken
 
-void wait(int *chopstick) {
-    while (*chopstick == 0) {
-        // Wait until chopstick is available
-        usleep(1000); // Sleep for a short time to avoid busy waiting
-    }
-    *chopstick = 0; // Mark chopstick as taken
+void wait(int *semaphore){
+	while(*semaphore==0){
+		usleep(1000);
+	}
+	*semaphore=0;
+}
+void signall(int *semaphore){
+	*semaphore=1;
 }
 
-void signall(int *chopstick) {
-    *chopstick = 1; // Mark chopstick as available
+
+void philosopher(int *id){
+	int local_id=*id;
+	wait(&chopstick[local_id]);
+	wait(&chopstick[(local_id + 1) % NUM_PHILOSOPHERS]);
+	
+	//philosopher does something
+	printf("Now philosopher %d is using the chopsticks %d %d",local_id,local_id,local_id+1 );
+	usleep(40000);
+	
+	signall(&chopstick[local_id]);
+	signall(&chopstick[(local_id + 1) % NUM_PHILOSOPHERS]);	
 }
 
-void *philosopher(void *arg) {
-    int id = *((int *)arg);
-    while (1) {
-        // Thinking
-        printf("Philosopher %d is thinking...\n", id);
-
-        // Pick up chopsticks
-        wait(&chopstick[id]);
-        wait(&chopstick[(id + 1) % NUM_PHILOSOPHERS]);
-
-        // Eating
-        printf("Philosopher %d is eating...\n", id);
-        usleep(1000000); // Simulate eating time
-
-        // Put down chopsticks
-        signall(&chopstick[id]);
-        signall(&chopstick[(id + 1) % NUM_PHILOSOPHERS]);
-    }
-    return NULL;
-}
-
-int main() {
-    pthread_t philosophers[NUM_PHILOSOPHERS];
-    int ids[NUM_PHILOSOPHERS];
-    int i;
-
-    // Create philosopher threads
-    for (i = 0; i < NUM_PHILOSOPHERS; i++) {
-        ids[i] = i;
-        pthread_create(&philosophers[i], NULL, philosopher, &ids[i]);
-    }
-
-    // Join philosopher threads (this part is never reached in this example)
-    for (i = 0; i < NUM_PHILOSOPHERS; i++) {
-        pthread_join(philosophers[i], NULL);
-    }
-
-    return 0;
+void main(){
+	pthread_t philosophers[NUM_PHILOSOPHERS];
+	int ids[NUM_PHILOSOPHERS]={0,1,2,3,4};
+	int i=0;
+	
+	for(i=0;i<NUM_PHILOSOPHERS;i++){
+		pthread_create(&philosophers[i],NULL,philosopher,&ids[i]);
+	}
 }
 
