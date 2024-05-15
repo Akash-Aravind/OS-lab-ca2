@@ -2,12 +2,12 @@
 #include <pthread.h>
 #include <unistd.h>
 
-#define BUFFER_SIZE 5
-int buffer[BUFFER_SIZE];
-int in = 0;
-int out = 0;
-int count = 0;
-pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER;
+#define NUM_SLOTS 5
+int mutex_sem = 1;
+int empty_sem = NUM_SLOTS;
+int full_sem = 0;
+int index = -1;
+int buffer[NUM_SLOTS];
 
 void wait(int *semaphore) {
     while (*semaphore <= 0) {
@@ -20,63 +20,50 @@ void signall(int *semaphore) {
     *semaphore += 1;
 }
 
-void produce(int item) {
-    buffer[in] = item;
-    in = (in + 1) % BUFFER_SIZE;
-    count++;
-}
-
-int consume() {
-    int item = buffer[out];
-    out = (out + 1) % BUFFER_SIZE;
-    count--;
-    return item;
-}
-
-void *producer(void *arg) {
-    int item = 0;
-    while (1) {
-        printf("Producer is producing item %d...\n", item);
-        pthread_mutex_lock(&buffer_mutex);
-        if (count < BUFFER_SIZE) {
-            produce(item);
-            printf("Producer produced item %d.\n", item);
-            item++;
-        }
-        pthread_mutex_unlock(&buffer_mutex);
-        usleep(1000000); // Producer sleep
+void producer() {
+    wait(&mutex_sem);
+    if (full_sem == NUM_SLOTS) {
+        printf("Buffer is full. Producer waiting...\n");
+        signall(&mutex_sem);
+        return;
     }
-    return NULL;
+    index++;
+    full_sem++;
+    empty_sem--;
+    buffer[index] = 1; // Add item to the buffer
+    printf("Producer produced item %d\n", index);
+    signall(&mutex_sem);
 }
 
-void *consumer(void *arg) {
-    int item;
-    while (1) {
-        pthread_mutex_lock(&buffer_mutex);
-        if (count > 0) {
-            item = consume();
-            printf("Consumer consumed item %d.\n", item);
-            signall(&count); // Signal buffer space available
-        }
-        pthread_mutex_unlock(&buffer_mutex);
-        usleep(2000000); // Consumer sleep
+void consumer() {
+    wait(&mutex_sem);
+    if (empty_sem == NUM_SLOTS) {
+        printf("Buffer is empty. Consumer waiting...\n");
+        signall(&mutex_sem);
+        return;
     }
-    return NULL;
+    int item = buffer[index];
+    index--;
+    full_sem--;
+    empty_sem++;
+    printf("Consumer consumed item %d\n", item);
+    signall(&mutex_sem);
 }
 
 int main() {
-    pthread_t producer_thread, consumer_thread;
+    pthread_t producers[NUM_SLOTS];
+    pthread_t consumers[NUM_SLOTS];
+    int i;
 
-    // Create producer thread
-    pthread_create(&producer_thread, NULL, producer, NULL);
+    for (i = 0; i < NUM_SLOTS; i++) {
+        pthread_create(&producers[i], NULL, (void *)producer, NULL);
+        pthread_create(&consumers[i], NULL, (void *)consumer, NULL);
+    }
 
-    // Create consumer thread
-    pthread_create(&consumer_thread, NULL, consumer, NULL);
-
-    // Join threads (this part is never reached in this example)
-    pthread_join(producer_thread, NULL);
-    pthread_join(consumer_thread, NULL);
+    for (i = 0; i < NUM_SLOTS; i++) {
+        pthread_join(producers[i], NULL);
+        pthread_join(consumers[i], NULL);
+    }
 
     return 0;
 }
-
